@@ -48,7 +48,7 @@ class Animator:
 
         self.calc_points = network.sample_DDPM(calc_points, device)
         self.up = self.calc_points[:, 0, 0] > 0
-        self.down = self.calc_points[:, 1, 0] > 0
+        self.down = self.calc_points[:, 1, 0] < 0
         
         self.calculate(scheduler.T-1)
         
@@ -115,7 +115,7 @@ class Animator:
         self.point_locs = self.calc_points[:, :, self.time]
         torch.cuda.empty_cache()
         
-    def draw(self):
+    def draw(self, save=False):
         ax_l1_nonlinear = self.fig.add_subplot(331)
         ax_l2_nonlinear = self.fig.add_subplot(332)
         ax_l3_nonlinear = self.fig.add_subplot(333)
@@ -165,8 +165,9 @@ class Animator:
         ax_vec_field.quiver(self.X_vec, self.Y_vec, self.vec_field[:, :, 0], self.vec_field[:, :, 1])
         plot_nullclines(self.X, self.Y, self.nullclines, ax_vec_field)
         
-        self.fig.savefig(f'{self.folder}/{self.T-self.time:03d}', bbox_inches='tight')
-        plt.clf()
+        if save:
+            self.fig.savefig(f'{self.folder}/{self.T-self.time:03d}', bbox_inches='tight')
+            plt.clf()
         
     def runner(self, folder):
         if not os.path.isdir(folder):
@@ -189,8 +190,7 @@ class Animator:
             ax.set_xlabel('$x_1$')
             ax.set_ylabel('$x_2$')
         
-        # TODO: fix off by one error
-        times = [499, 300, 100, 0]
+        times = [self.scheduler.T-1, (self.scheduler.T*2)//3, self.scheduler.T//3, 0]
         for i in range(4):
             axs[i, 0].set_ylabel(f'T = {times[i]}\n$x_2$')
             
