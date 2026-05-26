@@ -39,53 +39,79 @@ class Animator:
         x = np.linspace(data_range[0], data_range[1], contour_bins)
         self.X, self.Y = np.meshgrid(x, x)
 
-        # Grid for calculating vector field
-        x = np.linspace(data_range[0], data_range[1], vec_bins)
-        self.X_vec, self.Y_vec = np.meshgrid(x, x)
+        # Stride for calculating vector field
+        self.vec_stride = contour_bins // vec_bins
+        if self.vec_stride < 1:
+            self.vec_stride = 1
+        #x = np.linspace(data_range[0], data_range[1], vec_bins)
+        #self.X_vec, self.Y_vec = np.meshgrid(x, x)
 
         self.calc_points = network.sample_DDPM(calc_points, device)
         self.up = self.calc_points[:, 0, 0] > 0
         self.down = self.calc_points[:, 1, 0] > 0
         
-        torch.cuda.empty_cache()
-        
         self.calculate(scheduler.T-1)
         
-    def gen_vec_field(self):
-        t = self.time
-        with torch.no_grad():
-            xs = self.X_vec.reshape(-1, 1)
-            ys = self.Y_vec.reshape(-1, 1)
-            in_vals = torch.tensor(np.hstack((xs, ys)), dtype=torch.float32)
-
-            out_vals = self.network(in_vals.to(self.device), t)
-            field = -(1 - self.scheduler.alphas[t])/np.sqrt(1 - self.scheduler.alphabars[t])*out_vals
-
-            field = field.reshape(self.X_vec.shape[0], self.X_vec.shape[1], 2)
-            self.vec_field = field.detach().cpu().numpy()
-    
-    def gen_nonlinearities(self):
+    def gen_nonlinear_structure(self):
         t = self.time
         with torch.no_grad():
             xs = self.X.reshape(-1, 1)
             ys = self.Y.reshape(-1, 1)
-            in_vals = torch.tensor(np.hstack((xs, ys)), dtype=torch.float32)
+            
+            in_vals = torch.tensor(np.hstack((xs, ys)), dtype=torch.float32).to(self.device)
+            _, bitstrings, vec_field = self.network.reverse_diffuse_DDPM(in_vals, t, 
+                                                                         return_bitstrings=True, 
+                                                                         return_vec_field=True)
 
-            out_vals, bitstrings = self.network(in_vals.to(self.device), t, return_bitstrings=True)
-            out_vals = out_vals.reshape(self.X.shape[0], self.X.shape[1], 2)
-            nullclines = (1 - self.scheduler.alphas[t])/np.sqrt(1 - self.scheduler.alphabars[t])*out_vals > 0
-
+            vec_field = vec_field.detach().cpu().numpy()
+            vec_field = vec_field.reshape(self.X.shape[0], self.X.shape[1], 2)
+            nullclines = vec_field > 0
+            
             grid_bitstrings = []
             for bitstring in bitstrings:
                 grid_bitstrings.append(bitstring.reshape(self.X.shape[0], self.X.shape[1], bitstring.shape[1]))
+                
+            self.nullclines = nullclines
+            self.nonlinearities = grid_bitstrings
+            
+            self.X_vec = self.X[::self.vec_stride, ::self.vec_stride]
+            self.Y_vec = self.Y[::self.vec_stride, ::self.vec_stride]
+            self.vec_field = vec_field[::self.vec_stride, ::self.vec_stride]
+        
+#     def gen_vec_field(self):
+#         t = self.time
+#         with torch.no_grad():
+#             xs = self.X_vec.reshape(-1, 1)
+#             ys = self.Y_vec.reshape(-1, 1)
+#             in_vals = torch.tensor(np.hstack((xs, ys)), dtype=torch.float32)
 
-        self.nullclines = nullclines.detach().cpu().numpy()
-        self.nonlinearities = grid_bitstrings
+#             out_vals = self.network(in_vals.to(self.device), t)
+#             field = -(1 - self.scheduler.alphas[t])/np.sqrt(1 - self.scheduler.alphabars[t])*out_vals
+
+#             field = field.reshape(self.X_vec.shape[0], self.X_vec.shape[1], 2)
+#             self.vec_field = field.detach().cpu().numpy()
+    
+#     def gen_nonlinearities(self):
+#         t = self.time
+#         with torch.no_grad():
+#             xs = self.X.reshape(-1, 1)
+#             ys = self.Y.reshape(-1, 1)
+#             in_vals = torch.tensor(np.hstack((xs, ys)), dtype=torch.float32)
+
+#             out_vals, bitstrings = self.network(in_vals.to(self.device), t, return_bitstrings=True)
+#             out_vals = out_vals.reshape(self.X.shape[0], self.X.shape[1], 2)
+#             nullclines = (1 - self.scheduler.alphas[t])/np.sqrt(1 - self.scheduler.alphabars[t])*out_vals > 0
+
+#             grid_bitstrings = []
+#             for bitstring in bitstrings:
+#                 grid_bitstrings.append(bitstring.reshape(self.X.shape[0], self.X.shape[1], bitstring.shape[1]))
+
+#         self.nullclines = nullclines.detach().cpu().numpy()
+#         self.nonlinearities = grid_bitstrings
         
     def calculate(self, t):
         self.time = t
-        self.gen_nonlinearities()
-        self.gen_vec_field()
+        self.gen_nonlinear_structure()
         self.point_locs = self.calc_points[:, :, self.time]
         torch.cuda.empty_cache()
         
