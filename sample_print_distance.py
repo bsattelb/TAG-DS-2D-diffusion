@@ -20,42 +20,71 @@ checkpoint = torch.load(
     "checkpoints/nonlinears_e3.pt",
     map_location=device
 )
-
 net.load_state_dict(checkpoint["weights"])
 net.eval()
 
+# ---- convert scheduler arrays to torch tensors ----
+betas = torch.tensor(scheduler.betas, dtype=torch.float32, device=device)
+alphas = torch.tensor(scheduler.alphas, dtype=torch.float32, device=device)
+alphabars = torch.tensor(scheduler.alphabars, dtype=torch.float32, device=device)
+
 # -------------------
-# Generate sample trajectory
+# Generate sample trajectory (DDPM)
 # -------------------
+npts = 800
+locations = np.zeros((npts, 2, T + 1))
+
+# start from pure Gaussian at t = T
+x_T = np.random.normal(0, 1, (npts, 2))
+locations[:, :, T] = x_T
+
 with torch.no_grad():
-    locations = net.sample(
-        npts=800,
-        sigma_scale=1,
-        device=device
-    )
+    x_t = torch.tensor(x_T, dtype=torch.float32, device=device)
 
-# =========================================================
-# IMPORTANT: FIX TIME CONVENTION ONCE AND FOR ALL
-# Now we enforce:
-#   index 0   = Gaussian noise
-#   index T   = learned data distribution
-# =========================================================
+    for t in range(T - 1, -1, -1):
+        t_int = t
+        # shape (npts, 1) to match your network.forward
+        t_tensor = torch.full((npts, 1), t_int, dtype=torch.float32, device=device)
 
-locations = locations[:, :, ::-1]
+        # 1) predict epsilon
+        eps_theta = net(x_t, t_tensor)  # (npts, 2)
+
+        alpha_t = alphas[t_int]
+        alphabar_t = alphabars[t_int]
+        if t_int > 0:
+            alphabar_prev = alphabars[t_int - 1]
+        else:
+            alphabar_prev = torch.tensor(1.0, device=device)
+
+        beta_t = betas[t_int]
+
+        # 2) estimate x0
+        x0_hat = (x_t - torch.sqrt(1 - alphabar_t) * eps_theta) / torch.sqrt(alphabar_t)
+
+        # 3) posterior mean μ_t(x_t, x0_hat)
+        coef1 = torch.sqrt(alphabar_prev) * beta_t / (1 - alphabar_t)
+        coef2 = torch.sqrt(alpha_t) * (1 - alphabar_prev) / (1 - alphabar_t)
+        mu = coef1 * x0_hat + coef2 * x_t
+
+        # 4) posterior variance
+        var = beta_t * (1 - alphabar_prev) / (1 - alphabar_t)
+        sigma = torch.sqrt(var)
+
+        if t_int > 0:
+            z = torch.randn_like(x_t)
+            x_t = mu + sigma * z
+        else:
+            x_t = mu  # last step: no noise
+
+        locations[:, :, t_int] = x_t.cpu().numpy()
 
 # -------------------
 # OPTIONAL: convert to list format (only for printing/debugging)
 # -------------------
 trajectory_list = []
-
 for t in range(locations.shape[2]):
     coords_t = locations[:, :, t]
-
-    coords_list = [
-        (float(x), float(y))
-        for x, y in coords_t
-    ]
-
+    coords_list = [(float(x), float(y)) for x, y in coords_t]
     trajectory_list.append(coords_list)
 
 # -------------------
@@ -69,27 +98,22 @@ for t, coords in enumerate(trajectory_list):
 # ANIMATION (Gaussian → Data)
 # -------------------
 fig, ax = plt.subplots()
-
 ax.set_xlim(-3, 3)
 ax.set_ylim(-3, 3)
 
-def update(t):
+def update(frame_t):
     ax.clear()
-
-    coords = locations[:, :, t]
-
+    coords = locations[:, :, frame_t]
     ax.scatter(coords[:, 0], coords[:, 1], s=5)
-
     ax.set_xlim(-3, 3)
     ax.set_ylim(-3, 3)
 
-    if t == 0:
-        title = "Gaussian noise"
-    elif t == locations.shape[2] - 1:
-        title = "Learned data distribution"
+    if frame_t == T:
+        title = "t = T (Gaussian noise)"
+    elif frame_t == 0:
+        title = "t = 0 (learned distribution)"
     else:
-        title = f"t = {t}"
-
+        title = f"t = {frame_t}"
     ax.set_title(title)
 
 ani = animation.FuncAnimation(
@@ -103,19 +127,19 @@ ani = animation.FuncAnimation(
 plt.show()
 
 # -------------------
-# DIAGNOSTIC PLOTS (CORRECTED)
+# DIAGNOSTIC PLOTS
 # -------------------
 
 # Gaussian (start)
 plt.figure()
-plt.scatter(locations[:,0,0], locations[:,1,0], s=5)
-plt.title("t = 0 (Gaussian noise)")
+plt.scatter(locations[:, 0, T], locations[:, 1, T], s=5)
+plt.title("t = T (Gaussian noise)")
 plt.axis("equal")
 plt.show()
 
 # Data (end)
 plt.figure()
-plt.scatter(locations[:,0,-1], locations[:,1,-1], s=5)
-plt.title("t = T (learned distribution)")
+plt.scatter(locations[:, 0, 0], locations[:, 1, 0], s=5)
+plt.title("t = 0 (learned distribution)")
 plt.axis("equal")
 plt.show()
