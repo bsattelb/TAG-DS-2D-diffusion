@@ -3,7 +3,7 @@ import matplotlib.pyplot as plt
 import torch
 import matplotlib.patches as mpatches
 import os
-from tqdm.notebook import tqdm
+from tqdm.auto import tqdm
 
 def plot_nonlinearities(X, Y, nonlinearities, colors,
                        ax_l1_nonlinear,

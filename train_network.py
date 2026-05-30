@@ -14,7 +14,7 @@ import nonlinearity
 class Scheduler:
     def __init__(self, T):
         self.T=T
-        self.betas = np.linspace(1e-4, 0.01, T)
+        self.betas = np.linspace(1e-4, 0.02, T)
         
         self.alphas = 1 - self.betas
         # Note that alpha in the DDIM paper refers to alphabar
@@ -39,7 +39,7 @@ if __name__ == '__main__':
     # Training parameters
     criterion = nn.MSELoss(reduction='mean')
     npts = 1000
-    OoMs = 6
+    OoMs = 10
     opt = lambda params: torch.optim.Adam(params)
     network_shape = [3, 100, 100, 100, 2]
     batch_size = 64
@@ -55,11 +55,11 @@ if __name__ == '__main__':
     data_range = [-3, 3]
 
     # Saving_parameters
-    checkpoint_path = 'checkpoints/'
+    checkpoint_path = 'net_checkpoints/'
     animation_path = 'animation_e{}'
     epochs_path = 'animation_epoch'
-    if not os.path.isdir(epochs_path + '_DDPM'):
-        os.mkdir(epochs_path + '_DDPM')
+    if not os.path.isdir(epochs_path):
+        os.mkdir(epochs_path)
     if not os.path.isdir(checkpoint_path):
         os.mkdir(checkpoint_path)
         
@@ -71,45 +71,57 @@ if __name__ == '__main__':
     samples_seen = 0
     alph = torch.Tensor(scheduler.alphabars).to(device)
     Ts = list(range(1, T))
-    for i in tqdm(range(OoMs)):
-        if i > 0:
-            npts *= 10
-
-        lim = 10 if i == 0 else 9
-        for j in tqdm(range(lim), leave=False):
-            inputs = dataset.generate_initial_datapoints(npts, normalize=True).to(device)
+    OoMsPbar = tqdm(range(3, OoMs))
+    for i in OoMsPbar:
+        OoMsPbar.set_description(f'e{i}')
+        pbar = tqdm(total=(10**i-samples_seen)/10**(i-1), leave=False, desc='Tenths')
+        while samples_seen < 10**i:
+            inputs = dataset.generate_initial_datapoints(npts).to(device)
             train_loader = torch.utils.data.DataLoader(torch.utils.data.TensorDataset(inputs), 
                                                        batch_size=batch_size, shuffle=True)
             full_loss = 0
-            for inputs in tqdm(train_loader, leave=False, total=len(train_loader)):
-                inputs = inputs[0]
-                t = torch.randint(0, T, (inputs.shape[0],1))
-                e = torch.randn_like(inputs, requires_grad=False)
-                a = alph[t]
-                x = torch.sqrt(a)*inputs + torch.sqrt(1-a)*e
-                output = net(x, t.to(device))
-                optimizer.zero_grad()
-                loss = criterion(output, e)
-                full_loss += loss.item()
-                loss.backward()
-                optimizer.step()
-
-            samples_seen += len(train_loader.dataset)
+            inner_samples_seen = 0
+            inner_pbar = tqdm(total=10**(i-1)/npts, leave=False, desc='Epochs')
+            while inner_samples_seen < 10**(i-1):
+                for inputs in train_loader:
+                    inputs = inputs[0]
+                    t = torch.randint(0, T, (inputs.shape[0],1))
+                    e = torch.randn_like(inputs, requires_grad=False)
+                    a = alph[t]
+                    x = torch.sqrt(a)*inputs + torch.sqrt(1-a)*e
+                    output = net(x, t.to(device))
+                    optimizer.zero_grad()
+                    loss = criterion(output, e)
+                    full_loss += loss.item()
+                    loss.backward()
+                    optimizer.step()
+                    
+                inner_samples_seen += len(train_loader.dataset)
+                inner_pbar.update()
+                samples_seen += len(train_loader.dataset)
+            inner_pbar.close()
+            pbar.update()
+                
             losses.append(full_loss/npts)
-            samples.append(len(train_loader.dataset))
+            samples.append(samples_seen)
 
             temp = nonlinearity.Animator(net, colors, scheduler, data_range, 
-                                         grid_points, vec_grid_points, 
-                                         hist_points, device, is_DDPM=True)
-            temp.draw_small(samples_seen, times=[999, 333, 100, 0], folder=epochs_path + '_DDPM')
+                                        grid_points, vec_grid_points, 
+                                        hist_points, device, is_DDPM=True)
+            temp.draw_small(samples_seen, times=[999, 333, 100, 0], folder=epochs_path)
             plt.close()
 
             checkpoint = {
-                    'weights': net.state_dict(),
-                    'optimizer': optimizer.state_dict(),
-                    #'ema': ema.state_dict()
+                   'weights': net.state_dict(),
+                   'optimizer': optimizer.state_dict()
             }
-            np.save(checkpoint_path + '/losses.npy', losses)
-            np.save(checkpoint_path + '/samples.npy', samples)
+            np.save(checkpoint_path + 'losses.npy', losses)
+            np.save(checkpoint_path + 'samples.npy', samples)
 
-            torch.save(checkpoint, checkpoint_path + 'nonlinears_e{}.pt'.format(3+i))
+            torch.save(checkpoint, checkpoint_path + 'network_e{}.pt'.format(i))
+        pbar.close()
+        #temp = nonlinearity.Animator(net, colors, scheduler, data_range, 
+        #                                 grid_points, vec_grid_points, 
+        #                                 hist_points, device, is_DDPM=True)
+        #temp.make_animation(animation_path.format(i))
+    torch.save(net.state_dict, checkpoint_path + 'network_final.pt')
