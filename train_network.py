@@ -12,9 +12,9 @@ import network
 import nonlinearity
 
 class Scheduler:
-    def __init__(self, T):
+    def __init__(self, T=1000, betamin=1e-4, betamax=0.02):
         self.T=T
-        self.betas = np.linspace(1e-4, 0.02, T)
+        self.betas = np.linspace(betamin, betamax, T)
         
         self.alphas = 1 - self.betas
         # Note that alpha in the DDIM paper refers to alphabar
@@ -32,7 +32,7 @@ if __name__ == '__main__':
     # Diffusion parameters
     # t = 0 - circles
     # t = 1 - first addition of noise
-    # t = 500 - all noise added, ostensibly normally distributed
+    # t = T - all noise added, ostensibly normally distributed
     T = 1000
     scheduler = Scheduler(T)
 
