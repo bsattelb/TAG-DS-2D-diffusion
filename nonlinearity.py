@@ -149,19 +149,20 @@ class Animator:
             self.draw(folder=folder)
             
     def draw_small(self, epochs, times=None, folder=None):
-        fig = plt.figure(figsize=(25, 20))
+        fig = plt.figure(figsize=(25, len(times)*5))
         
         if times is None:
             times = [self.scheduler.T-1, (self.scheduler.T*2)//3, self.scheduler.T//3, 0]
             
-        axs = fig.subplots(len(times), 5)
+        axs = fig.subplots(len(times), 5, squeeze=False)
+        print(axs.shape)
         for ax in fig.axes:
             ax.set_ylim([-3, 3])
             ax.set_xlim([-3, 3])
             ax.set_aspect('equal')
             ax.set_xlabel('$x_1$')
             ax.set_ylabel('$x_2$')
-        for i in range(4):
+        for i in range(len(times)):
             axs[i, 0].set_ylabel(f'Time ${times[i]+1}\\to{times[i]}$\n$x_2$')
             
         fig.suptitle(f'{epochs:.0E} samples seen', fontsize=24)
