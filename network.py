@@ -43,7 +43,7 @@ class Network(nn.Module):
         noise = sigma_scale*self.scheduler.sigmas[t]*z
         
         vec_field = -np.sqrt(1 - self.scheduler.alphabars[t])*e_theta
-        vec_field += np.sqrt(self.scheduler.alphas[t])*np.sqrt(1 - alph_t_1 - self.scheduler.sigmas[t]**2)*e_theta
+        vec_field += np.sqrt(self.scheduler.alphas[t])*np.sqrt(1 - alph_t_1 - (sigma_scale*self.scheduler.sigmas[t])**2)*e_theta
             
         x_new = (x + vec_field)/np.sqrt(self.scheduler.alphas[t]) + noise
         
