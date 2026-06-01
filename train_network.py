@@ -102,7 +102,7 @@ if __name__ == '__main__':
             inner_pbar.close()
             pbar.update()
                 
-            losses.append(full_loss/npts)
+            losses.append(full_loss/inner_samples_seen)
             samples.append(samples_seen)
 
             temp = nonlinearity.Animator(net, colors, scheduler, data_range, 
