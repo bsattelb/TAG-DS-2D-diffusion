@@ -38,7 +38,7 @@ class Network(nn.Module):
             alph_t_1 = self.scheduler.alphabars[t-1]
         else:
             z = torch.zeros_like(x)
-            alph_t_1 = 1
+            alph_t_1 = 1 # alphabar_0 defined as one in DDIM paper
             
         noise = sigma_scale*self.scheduler.sigmas[t]*z
         
