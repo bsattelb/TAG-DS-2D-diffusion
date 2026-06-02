@@ -99,31 +99,36 @@ def compute_persistence_sequence(
     return diagrams
 
 
-def save_barcode_frames(
+import imageio.v2 as imageio
+from io import BytesIO
+
+def save_barcode_movie(
         diagrams,
-        outdir):
+        outfile,
+        fps=20):
 
-    os.makedirs(outdir, exist_ok=True)
+    with imageio.get_writer(outfile, mode="I", fps=fps) as writer:
 
-    for t, dgm in enumerate(diagrams):
+        for t, dgm in enumerate(diagrams):
 
-        fig = plt.figure(figsize=(7, 5))
+            fig = plt.figure(figsize=(7,5))
 
-        plot_diagrams(
-            dgm,
-            show=False
-        )
-
-        plt.title(f"Persistence t={t}")
-
-        plt.savefig(
-            os.path.join(
-                outdir,
-                f"barcode_{t:04d}.png"
+            plot_diagrams(
+                dgm,
+                show=False
             )
-        )
 
-        plt.close()
+            plt.title(f"Persistence t={t}")
+
+            buf = BytesIO()
+            plt.savefig(buf, format="png")
+            plt.close()
+
+            buf.seek(0)
+
+            frame = imageio.imread(buf)
+
+            writer.append_data(frame)
 
 
 ###########################################################################
@@ -265,90 +270,51 @@ def compute_vectorfield_zonoids(
 # PLOT ZONOID SEQUENCE
 ###########################################################################
 
-def save_zonoid_frames(
+def save_zonoid_movie(
         locations,
         hulls,
-        outdir):
-
-    os.makedirs(outdir, exist_ok=True)
-
-    T = len(hulls)
-
-    for t in range(T):
-
-        cloud = locations[:, :, t]
-
-        hull = hulls[t]
-
-        plt.figure(figsize=(6, 6))
-
-        plt.scatter(
-            cloud[:, 0],
-            cloud[:, 1],
-            s=2,
-            alpha=0.25
-        )
-
-        closed = np.vstack(
-            [hull, hull[0]]
-        )
-
-        plt.plot(
-            closed[:, 0],
-            closed[:, 1],
-            'r',
-            lw=3
-        )
-
-        plt.axis("equal")
-
-        plt.title(
-            f"Vitale Zonoid t={t}"
-        )
-
-        plt.savefig(
-            os.path.join(
-                outdir,
-                f"zonoid_{t:04d}.png"
-            )
-        )
-
-        plt.close()
-
-
-###########################################################################
-# MOVIES
-###########################################################################
-
-def make_movie(
-        frame_dir,
         outfile,
-        prefix):
+        fps=20):
 
-    frames = []
+    with imageio.get_writer(outfile, mode="I", fps=fps) as writer:
 
-    files = sorted([
-        f for f in os.listdir(frame_dir)
-        if f.startswith(prefix)
-    ])
+        for t in range(len(hulls)):
 
-    for f in files:
+            cloud = locations[:, :, t]
+            hull = hulls[t]
 
-        frames.append(
-            imageio.imread(
-                os.path.join(
-                    frame_dir,
-                    f
-                )
+            fig = plt.figure(figsize=(6,6))
+
+            plt.scatter(
+                cloud[:,0],
+                cloud[:,1],
+                s=2,
+                alpha=0.25
             )
-        )
 
-    imageio.mimsave(
-        outfile,
-        frames,
-        fps=10
-    )
+            closed = np.vstack(
+                [hull, hull[0]]
+            )
 
+            plt.plot(
+                closed[:,0],
+                closed[:,1],
+                'r',
+                lw=3
+            )
+
+            plt.axis("equal")
+            plt.title(f"Vitale Zonoid t={t}")
+
+            buf = BytesIO()
+            plt.savefig(buf, format="png")
+            plt.close()
+
+            buf.seek(0)
+
+            frame = imageio.imread(buf)
+
+            writer.append_data(frame)
 
 ###########################################################################
 # HAUSDORFF EVOLUTION
@@ -402,14 +368,6 @@ def diffusion_topology_geometry_pipeline(
         locations
     )
 
-    save_barcode_frames(
-        diagrams,
-        os.path.join(
-            outdir,
-            "barcodes"
-        )
-    )
-
     #######################################################################
     # Point cloud Vitale zonoids
     #######################################################################
@@ -419,12 +377,20 @@ def diffusion_topology_geometry_pipeline(
             locations
         )
 
-    save_zonoid_frames(
+    save_barcode_movie(
+        diagrams,
+        os.path.join(
+            outdir,
+            "barcode_evolution.gif"
+        )
+    )
+    
+    save_zonoid_movie(
         locations,
         hulls,
         os.path.join(
             outdir,
-            "zonoids"
+            "zonoid_evolution.gif"
         )
     )
 
@@ -486,34 +452,6 @@ def diffusion_topology_geometry_pipeline(
     )
     plt.close()
 
-    #######################################################################
-    # Movies
-    #######################################################################
-
-    make_movie(
-        os.path.join(
-            outdir,
-            "barcodes"
-        ),
-        os.path.join(
-            outdir,
-            "barcode_evolution.gif"
-        ),
-        "barcode"
-    )
-
-    make_movie(
-        os.path.join(
-            outdir,
-            "zonoids"
-        ),
-        os.path.join(
-            outdir,
-            "zonoid_evolution.gif"
-        ),
-        "zonoid"
-    )
-
     return {
         "locations": locations,
         "vec_fields": vec_fields,
@@ -541,7 +479,7 @@ if __name__ == "__main__":
     results = diffusion_topology_geometry_pipeline(
         model=model,
         device=device,
-        npts=500,
+        npts=100,
         sigma_scale=0.0,   # DDIM
         outdir="results"
     )
