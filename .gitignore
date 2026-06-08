@@ -7,3 +7,5 @@
 !*.py
 !*.ipynb
 !network_final.pt
+!nonlinear_animations
+!nonlinear_animations/*.mp4

@@ -55,8 +55,8 @@ class Animator:
         #self.X_vec, self.Y_vec = np.meshgrid(x, x)
 
         self.calc_points = network.sample(calc_points, self.sigma_scale, device)
-        self.up = self.calc_points[:, 0, 0] > 0
-        self.down = self.calc_points[:, 1, 0] < 0
+        self.up = self.calc_points[:, 0, 0] > 0.1
+        self.down = self.calc_points[:, 1, 0] < 0.1
         
         self.calculate(scheduler.T-1)
         
@@ -126,7 +126,7 @@ class Animator:
         down = self.down[:self.points_in_cloud]
         ax_point_cloud.scatter(temp[up, 0], temp[up, 1], s=1, c='y', label='Circle')
         ax_point_cloud.scatter(temp[down, 0], temp[down, 1], s=1, c='m', label='Square')
-        ax_point_cloud.legend()
+        #ax_point_cloud.legend()
         
         if self.is_DDPM:
             ax_vec_field.set_title('DDPM Vector Field')
