@@ -147,4 +147,4 @@ ani = animation.FuncAnimation(
 plt.show()
 
 # optional save
-ani.save("persistence_barcodes_fixed.mp4", fps=30, dpi=150)
+ani.save("persistence_barcodes_fixed.gif", fps=30, dpi=150)
