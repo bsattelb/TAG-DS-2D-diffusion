@@ -9,3 +9,5 @@
 !network_final.pt
 !nonlinear_animations
 !nonlinear_animations/*.mp4
+!animation_epoch
+!animation_epoch/*.png
